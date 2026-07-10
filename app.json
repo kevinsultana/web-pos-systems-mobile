@@ -38,10 +38,13 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "expo-secure-store",
+      "expo-web-browser",
+      "expo-camera",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
-      "typedRoutes": true,
       "reactCompiler": true
     }
   }
