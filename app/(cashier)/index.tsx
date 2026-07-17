@@ -122,6 +122,18 @@ export default function PosScreen() {
 
   const handleAddToCart = () => {
     if (!selectedProduct) return;
+
+    if (selectedProduct.product_variants.length > 0 && !selectedVariant) {
+      Toast.show({
+        type: 'error',
+        text1: 'Varian Belum Dipilih',
+        text2: 'Silakan pilih varian produk terlebih dahulu',
+        visibilityTime: 2000,
+        position: 'top',
+      });
+      return;
+    }
+
     addItem(selectedProduct, selectedVariant, quantity);
     Toast.show({
       type: 'success',
@@ -432,10 +444,19 @@ export default function PosScreen() {
                 </View>
               </View>
 
-              <TouchableOpacity style={styles.addButton} onPress={handleAddToCart}>
-                <Ionicons name="cart" size={20} color="#fff" style={{ marginRight: 8 }} />
-                <Text style={styles.addButtonText}>Tambah ke Keranjang</Text>
-              </TouchableOpacity>
+              {(() => {
+                const hasVariants = selectedProduct.product_variants.length > 0;
+                const isDisabled = hasVariants && !selectedVariant;
+                return (
+                  <TouchableOpacity
+                    style={[styles.addButton, isDisabled && styles.addButtonDisabled]}
+                    onPress={handleAddToCart}
+                  >
+                    <Ionicons name="cart" size={20} color="#fff" style={{ marginRight: 8 }} />
+                    <Text style={styles.addButtonText}>Tambah ke Keranjang</Text>
+                  </TouchableOpacity>
+                );
+              })()}
             </>
           )}
         </View>
@@ -540,6 +561,9 @@ const styles = StyleSheet.create({
   addButton: {
     flexDirection: 'row', backgroundColor: '#0a7ea4', borderRadius: 12,
     padding: 16, justifyContent: 'center', alignItems: 'center', marginTop: 20,
+  },
+  addButtonDisabled: {
+    backgroundColor: '#cbd5e1',
   },
   addButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });

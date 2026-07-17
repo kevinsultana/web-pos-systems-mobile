@@ -631,57 +631,59 @@ export default function CashierCartScreen() {
       {/* ── Voucher modal ── */}
       <Modal
         visible={showVoucher}
-        animationType="slide"
+        animationType="fade"
         transparent
         onRequestClose={() => setShowVoucher(false)}
       >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowVoucher(false)}
-        />
-        <View style={styles.modalSheet}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Voucher</Text>
-            <TouchableOpacity onPress={() => setShowVoucher(false)}>
-              <Ionicons name="close" size={24} color="#333" />
-            </TouchableOpacity>
-          </View>
-          {voucher && (
-            <View style={styles.activeVoucher}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.activeVoucherCode}>{voucher.code}</Text>
-                <Text style={styles.activeVoucherDesc}>
-                  Diskon{" "}
-                  {voucher.type === "PERCENTAGE"
-                    ? `${voucher.value}%`
-                    : formatPrice(voucher.value)}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={() => setVoucher(null)}>
-                <Ionicons name="close-circle" size={22} color="#dc2626" />
+        <View style={styles.centeredModalContainer}>
+          <Pressable
+            style={StyleSheet.absoluteFillObject}
+            onPress={() => setShowVoucher(false)}
+          />
+          <View style={styles.centeredModalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Voucher</Text>
+              <TouchableOpacity onPress={() => setShowVoucher(false)}>
+                <Ionicons name="close" size={24} color="#333" />
               </TouchableOpacity>
             </View>
-          )}
-          <View style={styles.voucherInputRow}>
-            <TextInput
-              style={styles.voucherInput}
-              placeholder="Masukkan kode voucher"
-              placeholderTextColor="#999"
-              value={voucherCode}
-              onChangeText={setVoucherCode}
-              autoCapitalize="characters"
-            />
-            <TouchableOpacity
-              style={styles.voucherApplyBtn}
-              onPress={handleApplyVoucher}
-              disabled={validatingVoucher}
-            >
-              {validatingVoucher ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={styles.voucherApplyText}>Pakai</Text>
-              )}
-            </TouchableOpacity>
+            {voucher && (
+              <View style={styles.activeVoucher}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.activeVoucherCode}>{voucher.code}</Text>
+                  <Text style={styles.activeVoucherDesc}>
+                    Diskon{" "}
+                    {voucher.type === "PERCENTAGE"
+                      ? `${voucher.value}%`
+                      : formatPrice(voucher.value)}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => setVoucher(null)}>
+                  <Ionicons name="close-circle" size={22} color="#dc2626" />
+                </TouchableOpacity>
+              </View>
+            )}
+            <View style={styles.voucherInputRow}>
+              <TextInput
+                style={styles.voucherInput}
+                placeholder="Masukkan kode voucher"
+                placeholderTextColor="#999"
+                value={voucherCode}
+                onChangeText={setVoucherCode}
+                autoCapitalize="characters"
+              />
+              <TouchableOpacity
+                style={styles.voucherApplyBtn}
+                onPress={handleApplyVoucher}
+                disabled={validatingVoucher}
+              >
+                {validatingVoucher ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.voucherApplyText}>Pakai</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -802,7 +804,7 @@ export default function CashierCartScreen() {
                 style={[
                   styles.paymentMethodTabText,
                   paymentMethod === "transfer" &&
-                    styles.paymentMethodTabTextActive,
+                  styles.paymentMethodTabTextActive,
                 ]}
               >
                 Transfer
@@ -907,7 +909,7 @@ export default function CashierCartScreen() {
                   style={[
                     styles.payButton,
                     parseInt(cashAmount || "0", 10) < total &&
-                      styles.payButtonDisabled,
+                    styles.payButtonDisabled,
                   ]}
                   disabled={
                     parseInt(cashAmount || "0", 10) < total || processingPayment
@@ -1216,22 +1218,24 @@ const styles = StyleSheet.create({
   },
   activeVoucherCode: { fontSize: 16, fontWeight: "700", color: "#059669" },
   activeVoucherDesc: { fontSize: 13, color: "#059669", marginTop: 2 },
-  voucherInputRow: { flexDirection: "row", gap: 10 },
+  voucherInputRow: { flexDirection: "column", gap: 10 },
   voucherInput: {
-    flex: 1,
     borderWidth: 1,
     borderColor: "#e2e8f0",
     borderRadius: 10,
     padding: 14,
     fontSize: 15,
     color: "#111",
+    width: "100%",
   },
   voucherApplyBtn: {
     backgroundColor: "#0a7ea4",
     borderRadius: 10,
-    paddingHorizontal: 24,
+    padding: 14,
     justifyContent: "center",
     alignItems: "center",
+    width: "100%",
+    marginTop: 4,
   },
   voucherApplyText: { color: "#fff", fontSize: 15, fontWeight: "600" },
 
@@ -1408,5 +1412,23 @@ const styles = StyleSheet.create({
     color: "#ccc",
     textAlign: "center",
     marginTop: 4,
+  },
+  centeredModalContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+  },
+  centeredModalSheet: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 24,
+    width: "85%",
+    maxHeight: "80%",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
 });

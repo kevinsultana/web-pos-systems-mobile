@@ -1,10 +1,12 @@
-import { Redirect, Tabs } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/stores/useAuthStore';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { useCartStore } from '@/stores/useCartStore';
+import { Ionicons } from '@expo/vector-icons';
+import { Redirect, Tabs } from 'expo-router';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 export default function CashierLayout() {
   const { isAuthenticated, role, isLoading } = useAuthStore();
+  const cartItemsCount = useCartStore((s) => s.items.reduce((sum, item) => sum + item.quantity, 0));
 
   if (isLoading) {
     return (
@@ -31,6 +33,18 @@ export default function CashierLayout() {
         options={{
           title: 'Checkout',
           tabBarIcon: ({ color, size }) => <Ionicons name="cart" size={size} color={color} />,
+          tabBarBadge: cartItemsCount > 0 ? cartItemsCount : undefined,
+          tabBarBadgeStyle: {
+            backgroundColor: '#ef4444',
+            color: '#fff',
+            fontSize: 11,
+            fontWeight: 'bold',
+            minWidth: 16,
+            height: 16,
+            borderRadius: 8,
+            textAlign: 'center',
+            alignSelf: 'center',
+          }
         }}
       />
       <Tabs.Screen
