@@ -4,15 +4,20 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, {
   DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
+import { captureRef } from "react-native-view-shot";
+import * as Sharing from "expo-sharing";
+import { Image } from "expo-image";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Modal,
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -21,6 +26,136 @@ import {
 
 function formatPrice(price: number): string {
   return `Rp${price.toLocaleString("id-ID")}`;
+}
+
+function generateTextReceipt(
+  order: any,
+  items: any[],
+  storeName: string,
+  storeCity: string,
+  includeHeader: boolean = true
+): string {
+  const width = 44;
+  const line = "-".repeat(width);
+
+  // Format Date (Indonesian locale)
+  const weekdays = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+  const months = [
+    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+  ];
+
+  const d = new Date(order.createdAt);
+  const weekdayName = weekdays[d.getDay()];
+  const dateNum = d.getDate();
+  const monthName = months[d.getMonth()];
+  const yearNum = d.getFullYear();
+
+  const dateStr = `${weekdayName}, ${dateNum} ${monthName} ${yearNum}`;
+  const timeStr = d.toLocaleTimeString("id-ID", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).replace(":", ".");
+
+  // Helper formatting functions
+  const formatCenter = (text: string) => {
+    if (text.length >= width) return text;
+    const padding = Math.floor((width - text.length) / 2);
+    return " ".repeat(padding) + text;
+  };
+
+  const formatRow = (left: string, right: string) => {
+    const spaces = width - left.length - right.length;
+    if (spaces <= 0) return left + " " + right;
+    return left + " ".repeat(spaces) + right;
+  };
+
+  const formatThreeColRow = (col1: string, col2: string, col3: string) => {
+    const c1Max = 18;
+    let c1 = col1;
+    if (c1.length > c1Max) {
+      c1 = c1.slice(0, c1Max - 3) + "...";
+    }
+    const col1Part = c1.padEnd(20);
+    const col2Part = col2.padStart(3).padEnd(6);
+    const col3Part = col3.padStart(14);
+    return col1Part + col2Part + col3Part;
+  };
+
+  let text = "";
+
+  if (includeHeader) {
+    text += formatCenter(storeName.toUpperCase()) + "\n";
+    text += formatCenter(storeCity) + "\n\n";
+  }
+
+  // Details Section 1
+  text += line + "\n";
+  text += formatRow(`No: #${order.id.slice(0, 8).toUpperCase()}`, dateStr) + "\n";
+  text += formatRow(`Kasir: POS`, timeStr) + "\n";
+  text += line + "\n";
+
+  // Items Header
+  text += formatThreeColRow("Item", "Qty", "Harga") + "\n";
+  text += line + "\n";
+
+  // Items Rows
+  items.forEach((i: any) => {
+    const name = i.productName;
+    const variant = i.variantLabel ? ` (${i.variantLabel})` : "";
+    const priceStr = formatPrice(i.price);
+    text += formatThreeColRow(`${name}${variant}`, i.quantity.toString(), priceStr) + "\n";
+  });
+
+  text += line + "\n";
+
+  // Totals Section
+  text += formatRow("TOTAL", formatPrice(order.totalPrice)) + "\n";
+
+  // Parse payment info from notes
+  let paymentMethod = "CASH";
+  let paidAmount = order.totalPrice;
+  let changeAmount = 0;
+  let discount = 0;
+
+  if (order.notes) {
+    try {
+      const parsed = JSON.parse(order.notes);
+      if (parsed.paymentMethod) {
+        paymentMethod = parsed.paymentMethod.toUpperCase();
+        if (parsed.paymentMethod === "cash" && parsed.cashAmount) {
+          paidAmount = parseInt(parsed.cashAmount, 10);
+          changeAmount = paidAmount - order.totalPrice;
+        }
+      }
+      if (parsed.discount) {
+        discount = parsed.discount;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (discount > 0) {
+    text += formatRow("Diskon", `-${formatPrice(discount)}`) + "\n";
+  }
+
+  text += formatRow("Tunai", formatPrice(paidAmount)) + "\n";
+  text += formatRow("Kembali", formatPrice(changeAmount)) + "\n";
+
+  text += line + "\n";
+
+  // Payment Method Row
+  text += `[Metode: ${paymentMethod}]\n`;
+  text += line + "\n\n";
+
+  // Footer
+  text += formatCenter("Terima Kasih! 🙏") + "\n";
+  text += formatCenter("Barang yang sudah dibeli tidak dapat dikembalikan") + "\n";
+  text += line + "\n";
+
+  return text;
 }
 
 // ── WIB (GMT+7 / Asia/Jakarta) date helpers ──
@@ -107,9 +242,70 @@ export default function TransactionsScreen() {
   const [showEndPicker, setShowEndPicker] = useState(false);
 
   // ── Detail modal state ──
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [loadingDetail, setLoadingDetail] = useState(false);
+
+  // ── Receipt reprint state ──
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [storeSettings, setStoreSettings] = useState<any | null>(null);
+  const receiptRef = useRef<View>(null);
+
+  useEffect(() => {
+    const fetchStore = async () => {
+      try {
+        const { data } = await supabase.from("store_settings").select("*").limit(1).single();
+        if (data) setStoreSettings(data);
+      } catch {
+        // silent
+      }
+    };
+    fetchStore();
+  }, []);
+
+  const handlePrintReceipt = async () => {
+    if (!receiptRef.current) return;
+    try {
+      const uri = await captureRef(receiptRef, {
+        format: "png",
+        quality: 1.0,
+      });
+
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (isAvailable) {
+        await Sharing.shareAsync(uri, {
+          mimeType: "image/png",
+          UTI: "public.png",
+        });
+      } else {
+        await Share.share({ url: uri });
+      }
+    } catch (err: any) {
+      Alert.alert("Gagal memproses cetak struk", err.message);
+    }
+  };
+
+  const handleSendWhatsApp = async () => {
+    if (!receiptRef.current) return;
+    try {
+      const uri = await captureRef(receiptRef, {
+        format: "png",
+        quality: 1.0,
+      });
+
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (isAvailable) {
+        await Sharing.shareAsync(uri, {
+          mimeType: "image/png",
+          UTI: "public.png",
+        });
+      } else {
+        await Share.share({ url: uri });
+      }
+    } catch (err: any) {
+      Alert.alert("Gagal memproses kirim WhatsApp", err.message);
+    }
+  };
 
   const fetchOrders = useCallback(
     async (isRefresh = false) => {
@@ -396,8 +592,137 @@ export default function TransactionsScreen() {
                   </Text>
                 </View>
               </View>
+
+              {(() => {
+                let paymentMethodText = "-";
+                let paidAmount = null;
+                let changeAmount = null;
+
+                if (selectedOrder.notes) {
+                  try {
+                    const parsed = JSON.parse(selectedOrder.notes);
+                    if (parsed.paymentMethod) {
+                      paymentMethodText = parsed.paymentMethod;
+                      if (parsed.paymentMethod === "cash" && parsed.cashAmount) {
+                        paidAmount = parseInt(parsed.cashAmount, 10);
+                        changeAmount = paidAmount - selectedOrder.totalPrice;
+                      }
+                    }
+                  } catch {
+                    paymentMethodText = selectedOrder.notes;
+                  }
+                }
+
+                return (
+                  <View style={styles.paymentDetailSection}>
+                    <View style={styles.paymentDetailRow}>
+                      <Text style={styles.paymentDetailLabel}>Metode Pembayaran</Text>
+                      <Text style={styles.paymentDetailValue}>{paymentMethodText}</Text>
+                    </View>
+                    {paidAmount !== null && (
+                      <>
+                        <View style={styles.paymentDetailRow}>
+                          <Text style={styles.paymentDetailLabel}>Tunai Bayar</Text>
+                          <Text style={[styles.paymentDetailValue, { textTransform: "none" }]}>
+                            {formatPrice(paidAmount)}
+                          </Text>
+                        </View>
+                        <View style={styles.paymentDetailRow}>
+                          <Text style={styles.paymentDetailLabel}>Kembalian</Text>
+                          <Text style={[styles.paymentDetailValue, { textTransform: "none" }]}>
+                            {formatPrice(changeAmount ?? 0)}
+                          </Text>
+                        </View>
+                      </>
+                    )}
+                  </View>
+                );
+              })()}
+
+              <TouchableOpacity
+                style={styles.viewReceiptBtn}
+                onPress={() => setShowReceipt(true)}
+              >
+                <Ionicons name="receipt-outline" size={20} color="#fff" />
+                <Text style={styles.viewReceiptBtnText}>Lihat & Cetak Struk</Text>
+              </TouchableOpacity>
             </>
           )}
+        </View>
+      </Modal>
+
+      {/* ── Receipt modal ── */}
+      <Modal
+        visible={showReceipt}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowReceipt(false)}
+      >
+        <View style={styles.centeredModalContainer}>
+          <Pressable
+            style={StyleSheet.absoluteFillObject}
+            onPress={() => setShowReceipt(false)}
+          />
+          <View style={styles.receiptModalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Struk Transaksi</Text>
+              <TouchableOpacity onPress={() => setShowReceipt(false)}>
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+
+            {selectedOrder && (
+              <>
+                <ScrollView style={styles.receiptScroll} contentContainerStyle={styles.receiptPaper}>
+                  <View ref={receiptRef} collapsable={false} style={styles.receiptPaperCaptured}>
+                    <View style={styles.receiptGraphicHeader}>
+                      {storeSettings?.logoUrl ? (
+                        <Image
+                          source={{ uri: storeSettings.logoUrl }}
+                          style={styles.receiptLogoImage}
+                        />
+                      ) : (
+                        <View style={styles.receiptLogoCircle}>
+                          <Ionicons name="flash" size={22} color="#000" />
+                        </View>
+                      )}
+                      <Text style={styles.receiptStoreName}>
+                        {storeSettings?.storeName ?? "SCHAW"}
+                      </Text>
+                      <Text style={styles.receiptStoreCity}>
+                        {storeSettings?.originCityName?.trim() ?? "Bandung"}
+                      </Text>
+                    </View>
+                    <Text style={styles.receiptText}>
+                      {generateTextReceipt(
+                        selectedOrder,
+                        orderItems,
+                        storeSettings?.storeName ?? "SCHAW",
+                        storeSettings?.originCityName?.trim() ?? "Bandung",
+                        false
+                      )}
+                    </Text>
+                  </View>
+                </ScrollView>
+
+                <View style={styles.receiptActionsRow}>
+                  <TouchableOpacity style={styles.receiptPrintBtn} onPress={handlePrintReceipt}>
+                    <Ionicons name="print-outline" size={20} color="#fff" />
+                    <Text style={styles.receiptBtnText}>Cetak Struk</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.receiptWaBtn} onPress={handleSendWhatsApp}>
+                    <Ionicons name="logo-whatsapp" size={20} color="#fff" />
+                    <Text style={styles.receiptBtnText}>Kirim WA</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity style={styles.receiptCloseBtn} onPress={() => setShowReceipt(false)}>
+                  <Text style={styles.receiptCloseBtnText}>Kembali</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
         </View>
       </Modal>
     </View>
@@ -574,6 +899,30 @@ const styles = StyleSheet.create({
   totalLabel: { fontSize: 16, fontWeight: "700", color: "#111" },
   totalAmount: { fontSize: 20, fontWeight: "800", color: "#0a7ea4" },
 
+  // Payment info in detail modal
+  paymentDetailSection: {
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
+    paddingTop: 12,
+    gap: 8,
+  },
+  paymentDetailRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  paymentDetailLabel: {
+    fontSize: 13,
+    color: "#64748b",
+  },
+  paymentDetailValue: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#1e293b",
+    textTransform: "uppercase",
+  },
+
   // iOS picker
   pickerOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.3)" },
   pickerContainer: {
@@ -595,5 +944,145 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     paddingHorizontal: 16,
     paddingBottom: 8,
+  },
+
+  // View Receipt Button in Detail Modal
+  viewReceiptBtn: {
+    backgroundColor: "#0a7ea4",
+    borderRadius: 10,
+    padding: 14,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 16,
+  },
+  viewReceiptBtnText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+
+  // Centered Modal
+  centeredModalContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+  },
+  receiptModalSheet: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 24,
+    width: "90%",
+    maxHeight: "85%",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  receiptScroll: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    padding: 12,
+    maxHeight: 350,
+    width: "100%",
+    marginBottom: 16,
+  },
+  receiptPaper: {
+    alignItems: "center",
+  },
+  receiptPaperCaptured: {
+    backgroundColor: "#fff",
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    width: 320,
+    alignItems: "center",
+  },
+  receiptText: {
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+    fontSize: 12,
+    color: "#1e293b",
+    lineHeight: 18,
+  },
+  receiptActionsRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 12,
+    width: "100%",
+  },
+  receiptPrintBtn: {
+    flex: 1,
+    backgroundColor: "#0a7ea4",
+    borderRadius: 10,
+    padding: 14,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+  },
+  receiptWaBtn: {
+    flex: 1,
+    backgroundColor: "#059669",
+    borderRadius: 10,
+    padding: 14,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+  },
+  receiptBtnText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  receiptCloseBtn: {
+    borderWidth: 1,
+    borderColor: "#94a3b8",
+    borderRadius: 10,
+    padding: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+  },
+  receiptCloseBtnText: {
+    color: "#64748b",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  receiptGraphicHeader: {
+    alignItems: "center",
+    marginBottom: 8,
+    width: "100%",
+  },
+  receiptLogoCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: "#000",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  receiptStoreName: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#000",
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
+  },
+  receiptStoreCity: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 2,
+  },
+  receiptLogoImage: {
+    width: 60,
+    height: 60,
+    marginBottom: 6,
   },
 });

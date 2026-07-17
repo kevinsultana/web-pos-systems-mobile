@@ -88,9 +88,13 @@ export interface Customer {
 
 export interface StoreSetting {
   id: string;
-  store_name: string;
+  store_name?: string;
+  storeName?: string;
   qrisUrl: string | null;
-  whatsapp_number: string | null;
+  logoUrl?: string | null;
+  whatsapp_number?: string | null;
+  whatsappNumber?: string | null;
+  originCityName?: string | null;
 }
 
 // ─── Order / Transaction ─────────────────────────────────
@@ -110,8 +114,10 @@ export interface Order {
   shippingCost: number;
   status: OrderStatus;
   orderType: string;
+  notes?: string | null;
   createdAt: string;
   items?: OrderItem[];
+  order_items?: OrderItem[];
 }
 
 export interface OrderItem {
