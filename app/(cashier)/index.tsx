@@ -33,6 +33,7 @@ export default function PosScreen() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
   const [quantity, setQuantity] = useState(1);
+  const [isGridView, setIsGridView] = useState(true);
 
   const addItem = useCartStore((s) => s.addItem);
 
@@ -191,6 +192,32 @@ export default function PosScreen() {
     const maxPrice = variantPrices.length > 0 ? Math.max(...variantPrices) : null;
     const productPrice = item.sell_price ?? item.base_price;
 
+    if (!isGridView) {
+      return (
+        <TouchableOpacity style={styles.listCard} onPress={() => openProduct(item)} activeOpacity={0.85}>
+          {masterImg ? (
+            <Image source={{ uri: masterImg }} style={styles.listCardImage} contentFit="cover" />
+          ) : (
+            <View style={[styles.listCardImage, styles.listCardImagePlaceholder]}>
+              <Ionicons name="image-outline" size={24} color="#ccc" />
+            </View>
+          )}
+          <View style={styles.listCardBody}>
+            <Text style={styles.listCardName} numberOfLines={2}>{item.name}</Text>
+            {minPrice !== null && minPrice !== maxPrice ? (
+              <Text style={styles.listCardPrice}>
+                {formatPrice(minPrice)} – {formatPrice(maxPrice!)}
+              </Text>
+            ) : (
+              <Text style={styles.listCardPrice}>
+                {formatPrice(minPrice ?? maxPrice ?? productPrice ?? 0)}
+              </Text>
+            )}
+          </View>
+        </TouchableOpacity>
+      );
+    }
+
     return (
       <TouchableOpacity style={styles.card} onPress={() => openProduct(item)} activeOpacity={0.85}>
         {masterImg ? (
@@ -272,6 +299,15 @@ export default function PosScreen() {
         <TouchableOpacity style={styles.iconBtn} onPress={() => setShowScanner(true)}>
           <Ionicons name="camera-outline" size={22} color="#666" />
         </TouchableOpacity>
+
+        {/* View mode toggle button */}
+        <TouchableOpacity style={styles.iconBtn} onPress={() => setIsGridView(!isGridView)}>
+          <Ionicons
+            name={isGridView ? 'list-outline' : 'grid-outline'}
+            size={22}
+            color="#666"
+          />
+        </TouchableOpacity>
       </View>
 
       {/* Active category badge — shows if filter is on */}
@@ -292,11 +328,12 @@ export default function PosScreen() {
         </View>
       ) : (
         <FlatList
+          key={isGridView ? 'grid' : 'list'}
           data={filtered}
           renderItem={renderProductCard}
           keyExtractor={(item) => item.id}
-          numColumns={2}
-          columnWrapperStyle={styles.row}
+          numColumns={isGridView ? 2 : 1}
+          columnWrapperStyle={isGridView ? styles.row : undefined}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           refreshing={loading}
@@ -508,6 +545,48 @@ const styles = StyleSheet.create({
   cardBody: { padding: 10 },
   cardName: { fontSize: 13, fontWeight: '600', color: '#111', lineHeight: 18 },
   cardPrice: { fontSize: 14, fontWeight: '700', color: '#0a7ea4', marginTop: 4 },
+
+  // Product list card (horizontal layout)
+  listCard: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 10,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+    width: '100%',
+  },
+  listCardImage: {
+    width: 72,
+    height: 72,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  listCardImagePlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+  },
+  listCardBody: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  listCardName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111',
+    lineHeight: 20,
+  },
+  listCardPrice: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0a7ea4',
+    marginTop: 4,
+  },
 
   // Filter modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
