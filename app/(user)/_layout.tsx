@@ -1,10 +1,12 @@
 import { Redirect, Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { useCartStore } from '@/stores/useCartStore';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 
 export default function UserLayout() {
   const { isAuthenticated, role, isLoading } = useAuthStore();
+  const cartCount = useCartStore((s) => s.items.reduce((sum, item) => sum + item.quantity, 0));
 
   if (isLoading) {
     return (
@@ -31,6 +33,7 @@ export default function UserLayout() {
         options={{
           title: 'Cart',
           tabBarIcon: ({ color, size }) => <Ionicons name="cart" size={size} color={color} />,
+          tabBarBadge: cartCount > 0 ? cartCount : undefined,
         }}
       />
       <Tabs.Screen
