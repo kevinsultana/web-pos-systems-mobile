@@ -4,10 +4,9 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, {
   DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
-import { captureRef } from "react-native-view-shot";
-import * as Sharing from "expo-sharing";
 import { Image } from "expo-image";
 import { useFocusEffect } from "expo-router";
+import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -23,140 +22,13 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { captureRef } from "react-native-view-shot";
 
 function formatPrice(price: number): string {
   return `Rp${price.toLocaleString("id-ID")}`;
 }
 
-function generateTextReceipt(
-  order: any,
-  items: any[],
-  storeName: string,
-  storeCity: string,
-  includeHeader: boolean = true
-): string {
-  const width = 44;
-  const line = "-".repeat(width);
 
-  // Format Date (Indonesian locale)
-  const weekdays = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
-  const months = [
-    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
-  ];
-
-  const d = new Date(order.createdAt);
-  const weekdayName = weekdays[d.getDay()];
-  const dateNum = d.getDate();
-  const monthName = months[d.getMonth()];
-  const yearNum = d.getFullYear();
-
-  const dateStr = `${weekdayName}, ${dateNum} ${monthName} ${yearNum}`;
-  const timeStr = d.toLocaleTimeString("id-ID", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).replace(":", ".");
-
-  // Helper formatting functions
-  const formatCenter = (text: string) => {
-    if (text.length >= width) return text;
-    const padding = Math.floor((width - text.length) / 2);
-    return " ".repeat(padding) + text;
-  };
-
-  const formatRow = (left: string, right: string) => {
-    const spaces = width - left.length - right.length;
-    if (spaces <= 0) return left + " " + right;
-    return left + " ".repeat(spaces) + right;
-  };
-
-  const formatThreeColRow = (col1: string, col2: string, col3: string) => {
-    const c1Max = 18;
-    let c1 = col1;
-    if (c1.length > c1Max) {
-      c1 = c1.slice(0, c1Max - 3) + "...";
-    }
-    const col1Part = c1.padEnd(20);
-    const col2Part = col2.padStart(3).padEnd(6);
-    const col3Part = col3.padStart(14);
-    return col1Part + col2Part + col3Part;
-  };
-
-  let text = "";
-
-  if (includeHeader) {
-    text += formatCenter(storeName.toUpperCase()) + "\n";
-    text += formatCenter(storeCity) + "\n\n";
-  }
-
-  // Details Section 1
-  text += line + "\n";
-  text += formatRow(`No: #${order.id.slice(0, 8).toUpperCase()}`, dateStr) + "\n";
-  text += formatRow(`Kasir: POS`, timeStr) + "\n";
-  text += line + "\n";
-
-  // Items Header
-  text += formatThreeColRow("Item", "Qty", "Harga") + "\n";
-  text += line + "\n";
-
-  // Items Rows
-  items.forEach((i: any) => {
-    const name = i.productName;
-    const variant = i.variantLabel ? ` (${i.variantLabel})` : "";
-    const priceStr = formatPrice(i.price);
-    text += formatThreeColRow(`${name}${variant}`, i.quantity.toString(), priceStr) + "\n";
-  });
-
-  text += line + "\n";
-
-  // Totals Section
-  text += formatRow("TOTAL", formatPrice(order.totalPrice)) + "\n";
-
-  // Parse payment info from notes
-  let paymentMethod = "CASH";
-  let paidAmount = order.totalPrice;
-  let changeAmount = 0;
-  let discount = 0;
-
-  if (order.notes) {
-    try {
-      const parsed = JSON.parse(order.notes);
-      if (parsed.paymentMethod) {
-        paymentMethod = parsed.paymentMethod.toUpperCase();
-        if (parsed.paymentMethod === "cash" && parsed.cashAmount) {
-          paidAmount = parseInt(parsed.cashAmount, 10);
-          changeAmount = paidAmount - order.totalPrice;
-        }
-      }
-      if (parsed.discount) {
-        discount = parsed.discount;
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  if (discount > 0) {
-    text += formatRow("Diskon", `-${formatPrice(discount)}`) + "\n";
-  }
-
-  text += formatRow("Tunai", formatPrice(paidAmount)) + "\n";
-  text += formatRow("Kembali", formatPrice(changeAmount)) + "\n";
-
-  text += line + "\n";
-
-  // Payment Method Row
-  text += `[Metode: ${paymentMethod}]\n`;
-  text += line + "\n\n";
-
-  // Footer
-  text += formatCenter("Terima Kasih! 🙏") + "\n";
-  text += formatCenter("Barang yang sudah dibeli tidak dapat dikembalikan") + "\n";
-  text += line + "\n";
-
-  return text;
-}
 
 // ── WIB (GMT+7 / Asia/Jakarta) date helpers ──
 
@@ -207,6 +79,29 @@ function formatWIB(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function formatWIBDateOnly(iso: string): string {
+  const normalized = iso.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(iso) ? iso : iso + "Z";
+  const d = new Date(normalized);
+  const wibTime = d.getTime() + 7 * 60 * 60 * 1000;
+  const wibDate = new Date(wibTime);
+  const weekdays = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+  const months = [
+    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+  ];
+  return `${weekdays[wibDate.getUTCDay()]}, ${wibDate.getUTCDate()} ${months[wibDate.getUTCMonth()]} ${wibDate.getUTCFullYear()}`;
+}
+
+function formatWIBTimeOnly(iso: string): string {
+  const normalized = iso.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(iso) ? iso : iso + "Z";
+  const d = new Date(normalized);
+  const wibTime = d.getTime() + 7 * 60 * 60 * 1000;
+  const wibDate = new Date(wibTime);
+  const hour = wibDate.getUTCHours().toString().padStart(2, "0");
+  const minute = wibDate.getUTCMinutes().toString().padStart(2, "0");
+  return `${hour}.${minute}`;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -680,6 +575,7 @@ export default function TransactionsScreen() {
                         <Image
                           source={{ uri: storeSettings.logoUrl }}
                           style={styles.receiptLogoImage}
+                          contentFit="contain"
                         />
                       ) : (
                         <View style={styles.receiptLogoCircle}>
@@ -693,15 +589,118 @@ export default function TransactionsScreen() {
                         {storeSettings?.originCityName?.trim() ?? "Bandung"}
                       </Text>
                     </View>
-                    <Text style={styles.receiptText}>
-                      {generateTextReceipt(
-                        selectedOrder,
-                        orderItems,
-                        storeSettings?.storeName ?? "SCHAW",
-                        storeSettings?.originCityName?.trim() ?? "Bandung",
-                        false
-                      )}
-                    </Text>
+
+                    {/* Divider Dotted */}
+                    <View style={styles.receiptDottedLine} />
+
+                    {/* Metadata */}
+                    <View style={styles.receiptMetaRow}>
+                      <Text style={styles.receiptMetaText}>No: #{selectedOrder.id.slice(0, 8).toUpperCase()}</Text>
+                      <Text style={styles.receiptMetaText}>{formatWIBDateOnly(selectedOrder.createdAt)}</Text>
+                    </View>
+                    <View style={styles.receiptMetaRow}>
+                      <Text style={styles.receiptMetaText}>Kasir: POS</Text>
+                      <Text style={styles.receiptMetaText}>{formatWIBTimeOnly(selectedOrder.createdAt)}</Text>
+                    </View>
+
+                    {/* Divider Dotted */}
+                    <View style={styles.receiptDottedLine} />
+
+                    {/* Items Header */}
+                    <View style={styles.receiptItemRow}>
+                      <Text style={[styles.receiptItemHeader, styles.colItem]}>Item</Text>
+                      <Text style={[styles.receiptItemHeader, styles.colQty, { textAlign: "center" }]}>Qty</Text>
+                      <Text style={[styles.receiptItemHeader, styles.colPrice, { textAlign: "right" }]}>Harga</Text>
+                    </View>
+
+                    {/* Divider Solid */}
+                    <View style={styles.receiptSolidLine} />
+
+                    {/* Items List */}
+                    {orderItems.map((item) => (
+                      <View key={item.id} style={styles.receiptItemRow}>
+                        <View style={styles.colItem}>
+                          <Text style={styles.receiptItemName}>{item.productName}</Text>
+                          {item.variantLabel && (
+                            <Text style={styles.receiptItemVariant}>{item.variantLabel}</Text>
+                          )}
+                        </View>
+                        <Text style={[styles.receiptItemText, styles.colQty, { textAlign: "center" }]}>{item.quantity}</Text>
+                        <Text style={[styles.receiptItemText, styles.colPrice, { textAlign: "right" }]}>
+                          {formatPrice(item.price)}
+                        </Text>
+                      </View>
+                    ))}
+
+                    {/* Divider Solid */}
+                    <View style={styles.receiptSolidLine} />
+
+                    {/* Summary Totals */}
+                    {(() => {
+                      let paymentMethod = "CASH";
+                      let paidAmount = selectedOrder.totalPrice;
+                      let changeAmount = 0;
+                      let discount = 0;
+
+                      if (selectedOrder.notes) {
+                        try {
+                          const parsed = JSON.parse(selectedOrder.notes);
+                          if (parsed.paymentMethod) {
+                            paymentMethod = parsed.paymentMethod.toUpperCase();
+                            if (parsed.paymentMethod === "cash" && parsed.cashAmount) {
+                              paidAmount = parseInt(parsed.cashAmount, 10);
+                              changeAmount = paidAmount - selectedOrder.totalPrice;
+                            }
+                          }
+                          if (parsed.discount) {
+                            discount = parsed.discount;
+                          }
+                        } catch {
+                          // ignore
+                        }
+                      }
+
+                      return (
+                        <View style={styles.receiptSummary}>
+                          <View style={styles.receiptTotalRow}>
+                            <Text style={styles.receiptTotalLabel}>TOTAL</Text>
+                            <Text style={styles.receiptTotalVal}>{formatPrice(selectedOrder.totalPrice)}</Text>
+                          </View>
+                          {discount > 0 && (
+                            <View style={styles.receiptMetaRow}>
+                              <Text style={styles.receiptSummaryLabel}>Diskon</Text>
+                              <Text style={styles.receiptSummaryVal}>-{formatPrice(discount)}</Text>
+                            </View>
+                          )}
+                          <View style={styles.receiptMetaRow}>
+                            <Text style={styles.receiptSummaryLabel}>Tunai</Text>
+                            <Text style={styles.receiptSummaryVal}>{formatPrice(paidAmount)}</Text>
+                          </View>
+                          <View style={styles.receiptMetaRow}>
+                            <Text style={styles.receiptSummaryLabel}>Kembali</Text>
+                            <Text style={styles.receiptSummaryVal}>{formatPrice(changeAmount)}</Text>
+                          </View>
+
+                          <View style={styles.receiptDottedLine} />
+
+                          <View style={styles.receiptMetaRow}>
+                            <Text style={styles.receiptSummaryLabel}>Metode Pembayaran</Text>
+                            <Text style={[styles.receiptSummaryVal, styles.uppercase]}>{paymentMethod}</Text>
+                          </View>
+                        </View>
+                      );
+                    })()}
+
+                    {/* Divider Dotted */}
+                    <View style={styles.receiptDottedLine} />
+
+                    {/* Footer */}
+                    <View style={styles.receiptFooter}>
+                      <Text style={styles.receiptFooterText}>Terima Kasih! 🙏</Text>
+                      <Text style={styles.receiptFooterTextSub}>
+                        Barang yang sudah dibeli tidak dapat dikembalikan
+                      </Text>
+                    </View>
                   </View>
                 </ScrollView>
 
@@ -973,8 +972,10 @@ const styles = StyleSheet.create({
   receiptModalSheet: {
     backgroundColor: "#fff",
     borderRadius: 16,
-    padding: 24,
-    width: "90%",
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+    width: "95%",
+    maxWidth: 400,
     maxHeight: "85%",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -987,19 +988,22 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "#e2e8f0",
-    padding: 12,
-    maxHeight: 350,
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+    maxHeight: 380,
     width: "100%",
     marginBottom: 16,
   },
   receiptPaper: {
     alignItems: "center",
+    justifyContent: "center",
   },
   receiptPaperCaptured: {
     backgroundColor: "#fff",
     paddingVertical: 20,
-    paddingHorizontal: 16,
-    width: 320,
+    paddingHorizontal: 12,
+    width: 290,
+    alignSelf: "center",
     alignItems: "center",
   },
   receiptText: {
@@ -1084,5 +1088,125 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     marginBottom: 6,
+  },
+  receiptDottedLine: {
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderStyle: "dashed",
+    borderRadius: 1,
+    height: 1,
+    width: "100%",
+    marginVertical: 8,
+  },
+  receiptSolidLine: {
+    height: 1,
+    backgroundColor: "#cbd5e1",
+    width: "100%",
+    marginVertical: 8,
+  },
+  receiptMetaRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    width: "100%",
+    marginVertical: 2,
+  },
+  receiptMetaText: {
+    fontSize: 11,
+    color: "#475569",
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  receiptItemRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    width: "100%",
+    marginVertical: 4,
+  },
+  receiptItemHeader: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1e293b",
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  receiptItemText: {
+    fontSize: 12,
+    color: "#334155",
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  receiptItemName: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#1e293b",
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  receiptItemVariant: {
+    fontSize: 10,
+    color: "#64748b",
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+    marginTop: 1,
+  },
+  colItem: {
+    flex: 5,
+  },
+  colQty: {
+    flex: 1.5,
+  },
+  colPrice: {
+    flex: 3.5,
+  },
+  receiptSummary: {
+    width: "100%",
+    marginTop: 4,
+  },
+  receiptTotalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    width: "100%",
+    marginVertical: 4,
+  },
+  receiptTotalLabel: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#0f172a",
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  receiptTotalVal: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0f172a",
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  receiptSummaryLabel: {
+    fontSize: 12,
+    color: "#475569",
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  receiptSummaryVal: {
+    fontSize: 12,
+    color: "#1e293b",
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+  },
+  receiptFooter: {
+    alignItems: "center",
+    width: "100%",
+    marginTop: 12,
+  },
+  receiptFooterText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#0f172a",
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+    textAlign: "center",
+  },
+  receiptFooterTextSub: {
+    fontSize: 9,
+    color: "#64748b",
+    fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
+    textAlign: "center",
+    marginTop: 4,
+  },
+  uppercase: {
+    textTransform: "uppercase",
   },
 });
